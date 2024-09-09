@@ -1,0 +1,31 @@
+<h1>HELLO WORLD</h1>
+<a href="settings/network.html"> WIFI SETTINGS</a>
+<a href="update"> OTA UPDATE</a>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Index</title>
+    <script>
+        function toggleLED(state) {
+            fetch(`/led_control?state=${state}`, {
+                method: 'GET'
+            }).then(response => response.text())
+              .then(text => {
+                  // Zeigt eine Bestätigung an
+              });
+        }
+    </script>
+</head>
+<body>
+    <h1>Willkommen zum ESP32 Webserver</h1>
+    
+    <!-- Button zum Ein- und Ausschalten der Onboard-LED -->
+    <button onclick="toggleLED('ON')">LED Ein</button>
+    <button onclick="toggleLED('OFF')">LED Aus</button>
+  
+    <br> 
+    <a href="settings/network.html"> WIFI SETTINGS</a>
+<a href="update"> OTA UPDATE</a>
+</body>
+</html>

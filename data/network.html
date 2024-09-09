@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Netzwerk und MQTT Einstellungen</title>
+    <script>
+        function scanNetworks() {
+            fetch('/scan_wifi')
+                .then(response => response.json())
+                .then(data => {
+                    let wifiList = document.getElementById("wifi-list");
+                    wifiList.innerHTML = '';
+                    data.forEach(network => {
+                        let option = document.createElement("option");
+                        option.value = network.ssid;
+                        option.text = network.ssid;
+                        wifiList.add(option);
+                    });
+                });
+        }
+        
+        function saveSettings() {
+            const ssid = document.getElementById("wifi-list").value;
+            const password = document.getElementById("password").value;
+            const mqttEnabled = document.getElementById("mqttEnabled").checked;
+            const mqttServer = document.getElementById("mqttServer").value;
+            const mqttPort = document.getElementById("mqttPort").value;
+            const mqttUser = document.getElementById("mqttUser").value;
+            const mqttPass = document.getElementById("mqttPass").value;
+
+            fetch('/save_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    ssid: ssid,
+                    password: password,
+                    mqttEnabled: mqttEnabled ? "true" : "false",
+                    mqttServer: mqttServer,
+                    mqttPort: mqttPort,
+                    mqttUser: mqttUser,
+                    mqttPass: mqttPass,
+                })
+            }).then(response => response.text())
+              .then(text => {
+                  alert(text);
+              });
+        }
+    </script>
+</head>
+<body onload="scanNetworks()">
+    <h1>Netzwerk und MQTT Einstellungen</h1>
+    <form onsubmit="event.preventDefault(); saveSettings();">
+        <h2>WLAN Einstellungen</h2>
+        <label for="wifi-list">SSID:</label>
+        <select id="wifi-list"></select>
+        <br>
+        <label for="password">Passwort:</label>
+        <input type="text" id="password" name="password">
+        <br>
+        
+        <h2>MQTT Einstellungen</h2>
+        <label for="mqttEnabled">MQTT Aktivieren:</label>
+        <input type="checkbox" id="mqttEnabled" name="mqttEnabled">
+        <br>
+        <label for="mqttServer">MQTT Server:</label>
+        <input type="text" id="mqttServer" name="mqttServer">
+        <br>
+        <label for="mqttPort">MQTT Port:</label>
+        <input type="number" id="mqttPort" name="mqttPort" value="1883">
+        <br>
+        <label for="mqttUser">MQTT Benutzername:</label>
+        <input type="text" id="mqttUser" name="mqttUser">
+        <br>
+        <label for="mqttPass">MQTT Passwort:</label>
+        <input type="password" id="mqttPass" name="mqttPass">
+        <br>
+        <button type="submit">Speichern</button>
+    </form>
+</body>
+</html>
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Settings</title>
+</head>
+<body>
+    <h1>WiFi Einstellungen</h1>
+    <form action="/save_wifi" method="POST">
+        <label for="ssid">SSID:</label><br>
+        <select id="ssid" name="ssid">
+             Die Optionen werden durch das JS dynamisch hinzugefügt 
+        </select><br>
+        <label for="password">Passwort:</label><br>
+        <input type="password" id="password" name="password"><br><br>
+        <input type="submit" value="Speichern">
+    </form>
+    <a href="../index.html"> Startseite</a>
+    <script>
+        // Funktion, um die WLANs zu laden
+        function loadNetworks() {
+            fetch('/scan_wifi')
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('ssid');
+                    data.forEach(network => {
+                        const option = document.createElement('option');
+                        option.value = network.ssid;
+                        option.text = `${network.ssid} (${network.rssi} dBm)`;
+                        select.add(option);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Lade die Netzwerke beim Start
+        window.onload = loadNetworks;
+    </script>
+</body>
+</html> -->
