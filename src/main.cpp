@@ -11,8 +11,9 @@
 #include "main.h"
 
 #include <ArduinoHA.h>
-//#define NUM_LEDS 100
-//#define DATA_PIN 4
+#define NUM_LEDS 10
+#define DATA_PIN 16
+#define COLOR_ORDER GRB
 ShelfClock shelfClock;
 
 ShelfClock::ShelfClock() {
@@ -33,7 +34,8 @@ void saveConfigCallback();
 void setupMQTT();
 void reconnect();  
 void setLEDState(String state) ;
-void onMqttConnected();// setup - load all web handlers
+void onMqttConnected();
+void initLED();// setup - load all web handlers
 
 Preferences    pref;
 WebServer server( 80 );
@@ -84,12 +86,13 @@ String    mqttServer,mqttUser, mqttPass;
 int       mqttPort;
 bool      mqttEnabled = 0;
 //CRGB leds[NUM_LEDS];
-// void fill(CRGB color)
-// {
-//     for(int i = 0; i < NUM_LEDS; i++) {
-//         leds[i] = color;
-//     }
-// }
+CRGB LEDs[NUM_LEDS];
+void fill(CRGB color)
+{
+    for(int i = 0; i < NUM_LEDS; i++) {
+        LEDs[i] = color;
+    }
+}
 
 
 void setup() {
@@ -121,6 +124,7 @@ void setup() {
 
     initHANDLERS();
     initSERVER();
+    initLED();
     device.setName("Arduino");
     device.setSoftwareVersion("1.0.0");
 
@@ -142,6 +146,11 @@ void setup() {
 
     Serial.println("HTTP server started");
 }
+void initLED(){
+    FastLED.addLeds<WS2812B,DATA_PIN,COLOR_ORDER>(LEDs,NUM_LEDS).setCorrection(TypicalLEDStrip);
+
+}
+
 
 void loop(void) {
  
@@ -149,13 +158,10 @@ void loop(void) {
    if (!client.connected()) {
         // reconnect();
   }
-//      fill(CRGB::Red);
-//     FastLED.show();
-//      delay(500);
-//   // Now turn the LED off, then pause
-//     fill(CRGB::Black);
-//     FastLED.show();
-    delay(500);
+    
+    
+  // Now turn the LED off, then pause
+    
     client.loop();
     mqtt.loop();
 
@@ -242,10 +248,14 @@ void onMqttConnected()
 void ShelfClock::setLEDState(const String &state) {
     if (state == "ON") {
         digitalWrite(LED_BUILTIN, HIGH);
+         fill(CRGB::Red);
+        FastLED.show();
         LedOnBoard->setState(1);
         
     } else if (state == "OFF") {
         digitalWrite(LED_BUILTIN, LOW);
+        fill(CRGB::Blue);
+        FastLED.show();
         LedOnBoard->setState(0);
     }
 }
