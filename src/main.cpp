@@ -9,11 +9,23 @@
 #include <FastLED.h>
 #include "handler.h"
 #include "main.h"
-
 #include <ArduinoHA.h>
-#define NUM_LEDS 10
+#include <time.h>
+
+
 #define DATA_PIN 16
 #define COLOR_ORDER GRB
+#define LEDS_PER_SEGMENT 9 //LEDS PER SEGMENT
+#define SEGMENTS_PER_NUMBER 7
+#define NUM_DIGITS 7
+#define LEDS_PER_DIGIT (LEDS_PER_SEGMENT * SEGMENTS_PER_NUMBER)
+#define FAKE_NUM_LEDS (NUM_DIGITS * LEDS_PER_DIGIT)
+#define LEDS_SEG 37
+#define DIGITS_LEDS (SEGMENTS_PER_NUMBER * LEDS_PER_SEGMENT)
+#define LEDS_NUMBERS (LEDS_SEG * LEDS_PER_SEGMENT)
+#define SPOT_LED (NUM_DIGITS * 2)
+#define NUM_LEDS (LEDS_NUMBERS + SPOT_LED)
+CRGB LEDs[NUM_LEDS]; // Array für die LEDs
 ShelfClock shelfClock;
 
 ShelfClock::ShelfClock() {
@@ -35,7 +47,10 @@ void setupMQTT();
 void reconnect();  
 void setLEDState(String state) ;
 void onMqttConnected();
-void initLED();// setup - load all web handlers
+void initLED();
+void initNTP(); 
+void getNTP(); 
+void displayClock();// setup - load all web handlers
 
 Preferences    pref;
 WebServer server( 80 );
@@ -72,6 +87,44 @@ void onButtonCommand(HAButton* sender)
 }
 // define variables ------------------------------
 //#define LED_BUILTIN 2
+#define digit0 seg(0), seg(1), seg(2), seg(3), seg(4), seg(5), seg(6)
+#define fdigit1 seg(2), seg(7), seg(10), seg(15), seg(8), seg(3), seg(9)
+#define digit2 seg(10), seg(11), seg(12), seg(13), seg(14), seg(15), seg(16)
+#define fdigit3 seg(12), seg(17), seg(20), seg(25), seg(18), seg(13), seg(19)
+#define digit4 seg(20), seg(21), seg(22), seg(23), seg(24), seg(25), seg(26)
+#define fdigit5 seg(22), seg(27), seg(30), seg(35), seg(28), seg(23), seg(29)
+#define digit6 seg(30), seg(31), seg(32), seg(33), seg(34), seg(35), seg(36)
+#define seg(n) n*LEDS_PER_SEGMENT, n*LEDS_PER_SEGMENT+1, n*LEDS_PER_SEGMENT+2, n*LEDS_PER_SEGMENT+3, n*LEDS_PER_SEGMENT+4, n*LEDS_PER_SEGMENT+5, n*LEDS_PER_SEGMENT+6, n*LEDS_PER_SEGMENT+7, n*LEDS_PER_SEGMENT+8
+#define nseg(n) n*LEDS_PER_SEGMENT+8, n*LEDS_PER_SEGMENT+7, n*LEDS_PER_SEGMENT+6, n*LEDS_PER_SEGMENT+5, n*LEDS_PER_SEGMENT+4, n*LEDS_PER_SEGMENT+3, n*LEDS_PER_SEGMENT+2, n*LEDS_PER_SEGMENT+1, n*LEDS_PER_SEGMENT
+
+const char* host = "shelfclock";
+ 
+
+//  Time  ----------------------------------------------------------------------
+struct tm ntpTime;                      // structure to save time
+time_t    now;                          // this is the epoch
+uint32_t  currMillisCore1   = millis(); // curr time core1
+uint32_t  prevTimeSecCore1  = 0;        // prev time core1 (1 sec)
+int       prevTimeSecCore0  = 0;        // prev time core0 (1 sec)
+int       prevTimeMinCore0  = 0;        // prev time core0 (1 min)
+int       prevTimeHourCore0 = 0;        // prev time core0 (1 hour)
+int       prevTimeDayCore0  = 0;        // prev time core0 (1 day)
+
+TaskHandle_t taskCore0;
+
+//  mode CLOCK  ----------------------------------------------------------------
+String clkAddress  = "ch.pool.ntp.org";
+String clkTimeZone = "CET-1CEST,M3.5.0,M10.5.0/3";
+int    clkFormat   = 1; // 0 = AM/PM, 1 = 24h
+int    clkColor    = 0; // 0 = 2 def, 1 = 2 random
+
+int clkColorHR, clkColorHG, clkColorHB;
+int clkColorMR, clkColorMG, clkColorMB;
+
+
+
+
+const uint16_t FAKE_LEDs[FAKE_NUM_LEDS] = {digit0, fdigit1, digit2, fdigit3, digit4, fdigit5, digit6};
 //  wifi  ----------------------------------------------------------------------
 bool      apSwitch = 1;        // ap: 0 = off, 1 = on
 bool      apHidden = 0;        // ap: 0 = visible, 1 = hidden
@@ -85,14 +138,30 @@ String    wifiSSID, wifiPass;
 String    mqttServer,mqttUser, mqttPass;
 int       mqttPort;
 bool      mqttEnabled = 0;
-//CRGB leds[NUM_LEDS];
-CRGB LEDs[NUM_LEDS];
+
+
+
+byte numbers[] = {
+  0b0111111,   // 0
+  0b0100001,   // 1
+  0b1110110,   // 2
+  0b1110011,   // 3
+  0b1101001,   // 4
+  0b1011011,   // 5
+  0b1011111,   // 6
+  0b0110001,   // 7
+  0b1111111,   // 8
+  0b1111011,   // 9
+  0b0000000    // Leerzeichen
+};
+CRGB alternateColor = CRGB::Black;
 void fill(CRGB color)
 {
     for(int i = 0; i < NUM_LEDS; i++) {
         LEDs[i] = color;
     }
 }
+
 
 
 void setup() {
@@ -124,7 +193,9 @@ void setup() {
 
     initHANDLERS();
     initSERVER();
+    initNTP(); 
     initLED();
+   
     device.setName("Arduino");
     device.setSoftwareVersion("1.0.0");
 
@@ -153,19 +224,83 @@ void initLED(){
 
 
 void loop(void) {
- 
+ unsigned long currMillisCore1 = millis();
   server.handleClient();
    if (!client.connected()) {
         // reconnect();
   }
+  if ( ( currMillisCore1 - prevTimeSecCore1 ) >= 1000 ) { // inside here every second
+    prevTimeSecCore1 = currMillisCore1;                   // update previous reference time
+    time( &now );                                         // read the current time
+    localtime_r( &now, &ntpTime );  
+                        // update ntpTime with the current time
+    
+    
+   displayClock();
+    } 
     
     
   // Now turn the LED off, then pause
-    
+    FastLED.show();
     client.loop();
     mqtt.loop();
 
 }
+void displayNumber(uint16_t number, byte segment, CRGB color) {
+
+    uint16_t startindex = 0;
+    switch (segment) {
+    case 0: startindex = 0; break;
+    case 1: startindex = (LEDS_PER_DIGIT * 1); break;
+    case 2: startindex = (LEDS_PER_DIGIT * 2); break;
+    case 3: startindex = (LEDS_PER_DIGIT * 3); break;
+    case 4: startindex = (LEDS_PER_DIGIT * 4); break;
+    case 5: startindex = (LEDS_PER_DIGIT * 5); break;
+    case 6: startindex = (LEDS_PER_DIGIT * 6); break;
+    }
+    for(byte i =0; i<SEGMENTS_PER_NUMBER; i++)
+
+     for (byte j = 0; j < LEDS_PER_SEGMENT; j++) { 
+        yield();
+        LEDs[FAKE_LEDs[i * LEDS_PER_SEGMENT + j + startindex]] = 
+        ((numbers[number] & (1 << i)) == (1 << i)) ? color : alternateColor;
+
+
+
+     }
+
+
+}
+void displayClock(){
+    int  hour = ntpTime.tm_hour; // value of hours
+    int  mins = ntpTime.tm_min;  // value of minutes
+    //CHSV clkHColor;              // color for hours
+    //CHSV clkMColor;              // color for minutes
+
+  // adjust hours based on time format
+  if ( !clkFormat ) {
+    if ( hour > 12 ) {  // if hours > 12 ...
+      hour = hour - 12; // ... turn 13:mm to 01:mm PM
+    }
+    if ( hour < 1 ) {   // if hours = 00 ...
+      hour = hour + 12; // ... turn 00:mm to 12:mm AM
+    }
+  }
+
+  // build digits
+  int h1 = floor( hour / 10 ); // build h1
+  int h2 = hour % 10;          // build h2
+  int m1 = floor( mins / 10 ); // build m1
+  int m2 = mins % 10;          // build m2
+
+  displayNumber( h1, 6, CRGB::Blue ); // show first digit
+  displayNumber( h2, 4, CRGB::Blue ); // show second digit
+  displayNumber( m1, 2, CRGB::Blue ); // show third digit
+  displayNumber( m2, 0, CRGB::Blue ); // show fourth digit
+
+
+
+};
 
 void onMqttConnected()
 {
@@ -248,16 +383,36 @@ void onMqttConnected()
 void ShelfClock::setLEDState(const String &state) {
     if (state == "ON") {
         digitalWrite(LED_BUILTIN, HIGH);
-         fill(CRGB::Red);
+        displayNumber(3, 0, CRGB::Red);
         FastLED.show();
         LedOnBoard->setState(1);
         
     } else if (state == "OFF") {
         digitalWrite(LED_BUILTIN, LOW);
-        fill(CRGB::Blue);
+        displayNumber(1, 0, CRGB::Blue);
         FastLED.show();
         LedOnBoard->setState(0);
     }
+}
+void initNTP() {
+  Serial.println( "- NTP" );
+  if ( WiFi.status() == WL_CONNECTED ) {
+    // connect NTP (0 TZ offset)
+    configTime( 0, 0, clkAddress.c_str() );
+    // overwrite TZ
+    setenv( "TZ", clkTimeZone.c_str(), 1 );
+    // adjust the TZ
+    tzset();
+
+    if ( !getLocalTime( &ntpTime ) ) {
+      ESP.restart();
+    }
+  }
+}
+void getNTP() {
+  if ( WiFi.status() == WL_CONNECTED ) {
+    getLocalTime( &ntpTime );
+  }
 }
 
 void initSERVER() {
